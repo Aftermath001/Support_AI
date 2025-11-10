@@ -1,73 +1,80 @@
 import React, { useEffect, useRef } from 'react'
-import { supabase } from '../utils/supabaseClient'
+import { Navigate } from 'react-router-dom'
 import { useChatStore } from '../store/useChatStore'
+import useAuth from '../hooks/useAuth'
 import ChatInput from '../components/ChatInput'
 import ChatMessage from '../components/ChatMessage'
 import Loader from '../components/Loader'
+import HealthCheck from '../components/HealthCheck'
+import { getChatHistory, sendChatMessage } from '../utils/api'
 
 export default function Chat() {
-  const { sessionId, setSessionId, messages, addMessage, clear, loading, setLoading, setError } = useChatStore()
+  const { user, loading: authLoading } = useAuth()
+  const { messages, addMessage, clear, loading, setLoading, setError } = useChatStore()
   const endRef = useRef(null)
 
+  // Scroll to bottom when messages change
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
+  // Load chat history on mount
   useEffect(() => {
-    // Create a session row if not exists
-    if (!sessionId) {
-      const create = async () => {
-        const { data, error } = await supabase.from('chat_sessions').insert({}).select('id').single()
-        if (!error) setSessionId(data.id)
+    if (!user) return
+    const load = async () => {
+      try {
+        setLoading(true)
+        const { chats } = await getChatHistory()
+        clear() // Clear any existing messages
+        chats.forEach(chat => {
+          addMessage({
+            role: chat.sender === 'ai' ? 'assistant' : 'user',
+            content: chat.message,
+            created_at: chat.created_at
+          })
+        })
+      } catch (e) {
+        setError(e.message)
+        console.error('Failed to load chat history:', e)
+      } finally {
+        setLoading(false)
       }
-      create()
     }
-  }, [sessionId, setSessionId])
+    load()
+  }, [user])
 
   async function send(text) {
-    const message = { role: 'user', content: text, created_at: new Date().toISOString(), session_id: sessionId }
+    const message = { role: 'user', content: text, created_at: new Date().toISOString() }
     addMessage(message)
     setLoading(true)
-    const { error: saveErr } = await supabase.from('messages').insert({ session_id: sessionId, role: 'user', content: text })
-    if (saveErr) setError(saveErr.message)
+    setError(null)
 
-    // Call Edge Function
-    const { data, error } = await supabase.functions.invoke('ai-proxy', {
-      body: { session_id: sessionId, messages: [...messages, message] },
-    })
-    if (error) {
+    try {
+      const { reply } = await sendChatMessage(text)
+      const aiMessage = { role: 'assistant', content: reply, created_at: new Date().toISOString() }
+      addMessage(aiMessage)
+    } catch (error) {
       setError(error.message)
-      setLoading(false)
-      return
+      console.error('Failed to send message:', error)
     }
-
-    const aiMessage = { role: 'assistant', content: data?.reply ?? '', created_at: new Date().toISOString(), session_id: sessionId }
-    addMessage(aiMessage)
-    await supabase.from('messages').insert({ session_id: sessionId, role: 'assistant', content: aiMessage.content })
     setLoading(false)
   }
 
-  function endSession() {
-    clear()
-  }
+  if (authLoading) return <div className="p-4">Loading...</div>
+  if (!user) return <Navigate to="/login" replace />
 
   return (
     <section className="grid grid-rows-[1fr_auto] h-[calc(100vh-120px)] gap-3">
-      <div className="overflow-y-auto bg-white rounded-md p-4 shadow-sm" aria-live="polite">
-        {messages.length === 0 && (
+      <div className="overflow-y-auto bg-white rounded-md p-4 shadow-sm space-y-4" aria-live="polite">
+        <HealthCheck />
+        {messages.length === 0 && !loading ? (
           <p className="text-gray-600">Start a conversation with ICEN AI. Ask about FAQs, research topics, or support policies.</p>
-        )}
+        ) : null}
         {messages.map((m, idx) => (
           <ChatMessage key={idx} message={m} />
         ))}
         {loading && <Loader label="AI is typing" />}
         <div ref={endRef} />
       </div>
-      <div className="space-y-2">
-        <ChatInput onSend={send} disabled={loading} />
-        <div className="flex justify-between">
-          <button onClick={endSession} className="text-sm text-primary underline">End Session</button>
-          <span className="text-xs text-gray-500">{navigator.onLine ? 'Online' : 'Offline - messages will not send'}</span>
-        </div>
-      </div>
+      <ChatInput onSend={send} disabled={loading} />
     </section>
   )
 }

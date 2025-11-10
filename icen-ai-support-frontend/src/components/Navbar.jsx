@@ -2,6 +2,7 @@ import React from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { UserCircle2, MessageSquare, HelpCircle, Star, ShieldCheck } from 'lucide-react'
 import { supabase } from '../utils/supabaseClient'
+import useAuth from '../hooks/useAuth'
 
 export default function Navbar() {
   const location = useLocation()
@@ -11,6 +12,8 @@ export default function Navbar() {
     await supabase.auth.signOut()
     navigate('/login')
   }
+
+  const { role, loading } = useAuth()
 
   const navLink = (to, label, Icon) => (
     <Link to={to} className={`flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent/20 transition ${location.pathname === to ? 'text-primary' : 'text-gray-700'}`}>
@@ -29,7 +32,8 @@ export default function Navbar() {
           {navLink('/chat', 'Chat', MessageSquare)}
           {navLink('/faq', 'FAQ', HelpCircle)}
           {navLink('/feedback', 'Feedback', Star)}
-          {navLink('/admin', 'Admin', ShieldCheck)}
+          {/* Show admin only when user role is admin */}
+          {!loading && role === 'admin' && navLink('/admin', 'Admin', ShieldCheck)}
         </nav>
         <button onClick={signOut} className="flex items-center gap-2 px-3 py-2 rounded-md bg-primary text-white hover:bg-primary/90">
           <UserCircle2 size={18} /> Sign out

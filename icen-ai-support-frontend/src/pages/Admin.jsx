@@ -1,58 +1,109 @@
 import React, { useEffect, useState } from 'react'
-import { supabase } from '../utils/supabaseClient'
+import { Navigate } from 'react-router-dom'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
+import useAuth from '../hooks/useAuth'
+import { getAdminStats } from '../utils/api'
+import Loader from '../components/Loader'
 
 export default function Admin() {
-  const [stats, setStats] = useState({ totalChats: 0, avgRating: 0, tags: [] })
+  const { user, role, loading: authLoading } = useAuth()
+  const [stats, setStats] = useState({
+    totalChats: 0,
+    avgRating: 0,
+    avgResponseMs: 0,
+    topTags: []
+  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (authLoading) return
+    if (role !== 'admin') return
+
     const load = async () => {
-      const { data: chats } = await supabase.from('chat_sessions').select('id')
-      const { data: fb } = await supabase.from('feedback').select('rating')
-      const { data: faqs } = await supabase.from('faqs').select('tags')
-      const tagCounts = {}
-      for (const f of faqs ?? []) {
-        const tags = (f.tags || '').split(',').map(t => t.trim()).filter(Boolean)
-        for (const t of tags) tagCounts[t] = (tagCounts[t] || 0) + 1
+      try {
+        const data = await getAdminStats()
+        setStats({
+          totalChats: data.totalChats || 0,
+          avgRating: parseFloat(data.avgRating || 0).toFixed(2),
+          avgResponseMs: data.avgResponseMs || 0,
+          topTags: data.topTags || []
+        })
+      } catch (e) {
+        console.error('Failed to load admin stats:', e)
+        setError(e.message)
+      } finally {
+        setLoading(false)
       }
-      setStats({
-        totalChats: chats?.length || 0,
-        avgRating: fb?.length ? (fb.reduce((a, b) => a + (b.rating || 0), 0) / fb.length).toFixed(2) : 0,
-        tags: Object.entries(tagCounts).map(([name, value]) => ({ name, value }))
-      })
     }
     load()
-  }, [])
+  }, [authLoading, role])
 
   const COLORS = ['#2E7D32', '#66BB6A', '#A5D6A7', '#C8E6C9']
+
+  if (authLoading) return <div className="p-4">Loading...</div>
+  if (!user) return <Navigate to="/login" replace />
+  if (role !== 'admin') return (
+    <div className="p-4">
+      <div className="text-red-600">Unauthorized: admin access required</div>
+    </div>
+  )
 
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold">Admin Dashboard</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-md shadow-sm">
-          <div className="text-sm text-gray-600">Total Chats</div>
-          <div className="text-3xl font-bold text-primary">{stats.totalChats}</div>
-        </div>
-        <div className="bg-white p-4 rounded-md shadow-sm">
-          <div className="text-sm text-gray-600">Average Rating</div>
-          <div className="text-3xl font-bold text-primary">{stats.avgRating}</div>
-        </div>
-        <div className="bg-white p-4 rounded-md shadow-sm">
-          <div className="text-sm text-gray-600 mb-2">Top FAQ Tags</div>
-          <div className="h-48">
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie data={stats.tags} dataKey="value" nameKey="name" label>
-                  {stats.tags.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
+      {error ? (
+        <div className="text-red-600">Error: {error}</div>
+      ) : loading ? (
+        <div className="p-4"><Loader /></div>
+      ) : (
+        <div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-md shadow-sm text-center">
+              <div className="text-sm text-gray-600">Total Chats</div>
+              <div className="text-3xl font-bold text-primary">{stats.totalChats}</div>
+            </div>
+            <div className="bg-white p-4 rounded-md shadow-sm text-center">
+              <div className="text-sm text-gray-600">Average Rating</div>
+              <div className="text-3xl font-bold text-primary">
+                {stats.avgRating} / 5
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-md shadow-sm text-center">
+              <div className="text-sm text-gray-600">Avg Response Time</div>
+              <div className="text-3xl font-bold text-primary">
+                {(stats.avgResponseMs / 1000).toFixed(2)}s
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-md shadow-sm text-center">
+              <div className="text-sm text-gray-600 mb-2">Top FAQ Tags</div>
+              {stats.topTags.length > 0 ? (
+                <div className="text-3xl font-bold text-primary">
+                  {stats.topTags[0]?.name}
+                </div>
+              ) : (
+                <div className="text-gray-500">No tags yet</div>
+              )}
+            </div>
+          </div>
+
+          {/* Tags Distribution Chart */}
+          <div className="bg-white p-4 rounded-md shadow-sm">
+            <h3 className="text-lg font-medium mb-4">FAQ Tag Distribution</h3>
+            <div className="h-64">
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie data={stats.topTags} dataKey="value" nameKey="name" label>
+                    {stats.topTags.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
