@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { supabase } from '../utils/supabaseClient'
+import { supabase } from '../utils/supabaseClient' // ✅ import from client
 import { useNavigate } from 'react-router-dom'
 
 export default function Login() {
@@ -9,30 +9,64 @@ export default function Login() {
   const [error, setError] = useState(null)
   const navigate = useNavigate()
 
+  // --- LOGIN ---
   async function handleLogin(e) {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    setLoading(false)
-    if (error) setError(error.message)
-    else navigate('/chat')
+
+    try {
+      const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+      setLoading(false)
+
+      if (loginError) setError(loginError.message)
+      else if (data.session) navigate('/chat')
+      else setError('Login failed. Check your credentials.')
+    } catch (err) {
+      setLoading(false)
+      setError('Unexpected error: ' + err.message)
+    }
   }
 
+  // --- SIGNUP ---
   async function handleSignup(e) {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    const { error } = await supabase.auth.signUp({ email, password })
-    setLoading(false)
-    if (error) setError(error.message)
-    else navigate('/chat')
+
+    try {
+      const { data, error: signupError } = await supabase.auth.signUp({ email, password })
+      setLoading(false)
+
+      if (signupError) setError(signupError.message)
+      else {
+        alert('Signup successful! Please check your email to confirm.')
+        navigate('/chat')
+      }
+    } catch (err) {
+      setLoading(false)
+      setError('Unexpected error: ' + err.message)
+    }
   }
 
+  // --- PASSWORD RESET ---
   async function handleReset() {
-    if (!email) return setError('Enter email for reset link')
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/login' })
-    if (error) setError(error.message)
+    if (!email) return setError('Enter your email to receive reset link')
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/login',
+      })
+      setLoading(false)
+
+      if (resetError) setError(resetError.message)
+      else alert('Password reset email sent!')
+    } catch (err) {
+      setLoading(false)
+      setError('Unexpected error: ' + err.message)
+    }
   }
 
   return (
@@ -41,17 +75,50 @@ export default function Login() {
       {error && <div role="alert" className="mb-3 text-red-600">{error}</div>}
       <form className="space-y-3" onSubmit={handleLogin}>
         <div>
-          <label className="block text-sm font-medium" htmlFor="email">Email</label>
-          <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border rounded-md px-3 py-2" required />
+          <label htmlFor="email" className="block text-sm font-medium">Email</label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border rounded-md px-3 py-2"
+            required
+          />
         </div>
         <div>
-          <label className="block text-sm font-medium" htmlFor="password">Password</label>
-          <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded-md px-3 py-2" required />
+          <label htmlFor="password" className="block text-sm font-medium">Password</label>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full border rounded-md px-3 py-2"
+            required
+          />
         </div>
         <div className="flex items-center gap-2">
-          <button type="submit" disabled={loading} className="px-4 py-2 bg-primary text-white rounded-md disabled:opacity-50">Sign In</button>
-          <button onClick={handleSignup} disabled={loading} className="px-4 py-2 bg-accent text-white rounded-md disabled:opacity-50" aria-label="Sign up">Sign Up</button>
-          <button type="button" onClick={handleReset} className="text-sm text-primary underline ml-auto">Reset password</button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-primary text-white rounded-md disabled:opacity-50"
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            onClick={handleSignup}
+            disabled={loading}
+            className="px-4 py-2 bg-accent text-white rounded-md disabled:opacity-50"
+          >
+            Sign Up
+          </button>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="text-sm text-primary underline ml-auto"
+          >
+            Reset password
+          </button>
         </div>
       </form>
     </div>
