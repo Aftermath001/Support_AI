@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
-import { supabase } from '../utils/supabaseClient' // ✅ import from client
+import { supabase } from '../utils/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState('user') // default role
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const navigate = useNavigate()
@@ -35,7 +36,13 @@ export default function Login() {
     setError(null)
 
     try {
-      const { data, error: signupError } = await supabase.auth.signUp({ email, password })
+      const { data, error: signupError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { role } // store role in user_metadata
+        }
+      })
       setLoading(false)
 
       if (signupError) setError(signupError.message)
@@ -95,6 +102,18 @@ export default function Login() {
             className="w-full border rounded-md px-3 py-2"
             required
           />
+        </div>
+        <div>
+          <label htmlFor="role" className="block text-sm font-medium">Role</label>
+          <select
+            id="role"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="w-full border rounded-md px-3 py-2"
+          >
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
         </div>
         <div className="flex items-center gap-2">
           <button

@@ -46,17 +46,22 @@ export default function Chat() {
     addMessage(message)
     setLoading(true)
     setError(null)
-
+  
     try {
-      const { reply } = await sendChatMessage(text)
-      const aiMessage = { role: 'assistant', content: reply, created_at: new Date().toISOString() }
-      addMessage(aiMessage)
+      const data = await sendChatMessage(text)
+      if (data?.reply) {
+        const aiMessage = { role: 'assistant', content: data.reply, created_at: new Date().toISOString() }
+        addMessage(aiMessage)
+      } else {
+        setError('AI did not return a reply')
+      }
     } catch (error) {
       setError(error.message)
       console.error('Failed to send message:', error)
     }
     setLoading(false)
   }
+  
 
   if (authLoading) return <div className="p-4">Loading...</div>
   if (!user) return <Navigate to="/login" replace />

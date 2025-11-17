@@ -1,42 +1,65 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
-export async function getHealth() {
+// Get stored Supabase token
+function getToken() {
+  return localStorage.getItem('sb-token') || ''
+}
+
+async function getHealth() {
   const res = await fetch(`${API_URL}/api/health`)
-  if (!res.ok) throw new Error('Failed to fetch health')
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error('Health check failed:', errText)
+    throw new Error('Failed to fetch health')
+  }
   return res.json()
 }
 
-export async function getChatHistory() {
+async function getChatHistory() {
+  const token = getToken()
   const res = await fetch(`${API_URL}/api/chat/history`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('sb-token')}`,
-    }
+    headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error('Failed to fetch chat history')
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error('Chat history fetch failed:', errText)
+    throw new Error('Failed to fetch chat history')
+  }
   return res.json()
 }
 
-export async function sendChatMessage(message) {
+async function sendChatMessage(message, metadata = {}) {
+  const token = getToken()
   const res = await fetch(`${API_URL}/api/chat/send`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('sb-token')}`,
+      Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ message })
+    body: JSON.stringify({ message, metadata }),
   })
-  if (!res.ok) throw new Error('Failed to send message')
-  return res.json()
+
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error('Send chat message failed:', errText)
+    throw new Error('Failed to send message')
+  }
+
+  const data = await res.json()
+  return data // data should contain { reply }
 }
 
-export async function getAdminStats() {
+async function getAdminStats() {
+  const token = getToken()
   const res = await fetch(`${API_URL}/api/admin`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('sb-token')}`,
-    }
+    headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error('Failed to fetch admin stats')
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error('Admin stats fetch failed:', errText)
+    throw new Error('Failed to fetch admin stats')
+  }
   return res.json()
 }
 
-export { API_URL }
+export { getHealth, getChatHistory, sendChatMessage, getAdminStats, API_URL }
